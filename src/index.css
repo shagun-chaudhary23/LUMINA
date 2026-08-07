@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  h1, h2, h3, .font-editorial {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+  }
+}
+
+/* Custom Scrollbar for Editorial feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FAF7F2;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #141110;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #DCD0BE;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #332C28;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #991B1B;
+}
+
+/* Map custom height & z-index fixes */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  border-radius: 0.75rem;
+  z-index: 10;
+}
+
+.dark .leaflet-tile {
+  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+}
+
+/* Leaflet Popup Styling for Editorial Aesthetic */
+.leaflet-popup-content-wrapper {
+  background: #FAF7F2 !important;
+  color: #1F1B18 !important;
+  border-radius: 0.75rem !important;
+  border: 1px solid #991B1B !important;
+  box-shadow: 0 10px 25px rgba(153, 27, 27, 0.15) !important;
+  padding: 4px !important;
+}
+
+.dark .leaflet-popup-content-wrapper {
+  background: #1D1917 !important;
+  color: #F5EFE6 !important;
+  border: 1px solid #700018 !important;
+}
+
+.leaflet-popup-tip {
+  background: #FAF7F2 !important;
+}
+
+.dark .leaflet-popup-tip {
+  background: #1D1917 !important;
+}
