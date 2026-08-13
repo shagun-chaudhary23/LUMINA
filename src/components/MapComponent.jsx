@@ -78,7 +78,7 @@ export default function MapComponent({
 }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
-  const layerGroupRef.current = useRef(null);
+  const layerGroupRef = useRef(null);
   const heatLayerRef = useRef(null);
 
   useEffect(() => {
