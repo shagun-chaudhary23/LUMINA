@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet.heat';
 import { COMPREHENSIVE_LOCATIONS } from './LocationInput';
+import { formatRoutingCoords } from '../utils/geo';
 
 // Helper: Find closest landmark from our comprehensive database
 function findClosestLandmark(lat, lng) {
@@ -18,11 +19,51 @@ function findClosestLandmark(lat, lng) {
     }
   });
 
-  // If closest landmark is within ~1.5 km (approx 0.015 degrees), use landmark name
   if (closest && minDistanceSq < 0.0003) {
     return closest.name;
   }
   return null;
+}
+
+// Fetch pedestrian/foot profile route geometry (OpenRouteService + OSRM foot fallback)
+async function fetchPedestrianGeometry(waypoints) {
+  if (!waypoints || waypoints.length < 2) return waypoints;
+
+  const startLngLat = [waypoints[0][1], waypoints[0][0]]; // [lng, lat]
+  const endLngLat = [waypoints[waypoints.length - 1][1], waypoints[waypoints.length - 1][0]]; // [lng, lat]
+  
+  // 1. Try OpenRouteService foot-walking API
+  try {
+    const apiKey = 'ROTATED_FOR_SECURITY';
+    const orsUrl = `https://api.openrouteservice.org/v2/directions/foot-walking?api_key=${apiKey}&start=${startLngLat.join(',')}&end=${endLngLat.join(',')}`;
+    const orsRes = await fetch(orsUrl);
+    if (orsRes.ok) {
+      const orsData = await orsRes.json();
+      if (orsData.features && orsData.features[0] && orsData.features[0].geometry) {
+        // Convert GeoJSON [lng, lat] array to Leaflet [lat, lng]
+        return orsData.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+      }
+    }
+  } catch (err) {
+    console.warn("OpenRouteService foot profile fetch warning:", err);
+  }
+
+  // 2. Fallback to OSRM pedestrian/foot profile with full geometry
+  try {
+    const coordsString = formatRoutingCoords(waypoints);
+    const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordsString}?overview=full&geometries=geojson`;
+    const osrmRes = await fetch(osrmUrl);
+    if (osrmRes.ok) {
+      const osrmData = await osrmRes.json();
+      if (osrmData.routes && osrmData.routes[0] && osrmData.routes[0].geometry) {
+        return osrmData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+      }
+    }
+  } catch (err) {
+    console.warn("OSRM foot profile fallback warning:", err);
+  }
+
+  return waypoints;
 }
 
 export default function MapComponent({
@@ -37,7 +78,7 @@ export default function MapComponent({
 }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
-  const layerGroupRef = useRef(null);
+  const layerGroupRef.current = useRef(null);
   const heatLayerRef = useRef(null);
 
   useEffect(() => {
@@ -63,7 +104,6 @@ export default function MapComponent({
         const lng = e.latlng.lng;
 
         if (onMapClick) {
-          // Check local spatial landmark first
           const localLandmark = findClosestLandmark(lat, lng);
           let resolvedAddress = localLandmark || 'Unnamed area, City Map';
 
@@ -136,7 +176,7 @@ export default function MapComponent({
           <div style="font-size: 12px; font-weight: bold; color: #1F1B18; margin-bottom: 4px;">${m.location}</div>
           <div style="font-size: 11px; color: #444; margin-bottom: 6px; line-height: 1.4;">${m.description || ''}</div>
           ${imageHtml}
-          <div style="margin-top: 6px; font-size: 10px; background: #FEF2F2; color: #991B1B; padding: 4px 8px; border-radius: 4px; font-weight: 700; display: flex; justify-content: space-between;">
+          <div style="margin-top: 6px; font-size: 10px; background: #FEF2F2; color: #991B1B; padding: 4px 8px; border-radius: 4px; font-weight: 700; display: flex; justify-between;">
             <span>Severity: ${m.severity}</span>
             <span>Upvotes: ${m.upvotes || 0}</span>
           </div>
@@ -159,31 +199,42 @@ export default function MapComponent({
       layerGroupRef.current.addLayer(selectedMarker);
     }
 
-    // Render Routes & Auto-Fit Bounds
+    // Render Pedestrian/Foot Routes & Auto-Fit Bounds
     if (routes) {
-      if (routes.primaryWaypoints && routes.primaryWaypoints.length > 0) {
-        const primaryLine = L.polyline(routes.primaryWaypoints, {
-          color: '#DC2626',
-          weight: 5,
-          dashArray: '6, 8',
-          opacity: 0.85
-        });
-        primaryLine.bindPopup("<b>Direct Route</b><br/>Safety Score: Caution required");
-        layerGroupRef.current.addLayer(primaryLine);
-      }
+      const renderRoutes = async () => {
+        let fitBoundsTarget = null;
 
-      if (routes.safeWaypoints && routes.safeWaypoints.length > 0) {
-        const safeLine = L.polyline(routes.safeWaypoints, {
-          color: '#059669',
-          weight: 7,
-          opacity: 0.95
-        });
-        safeLine.bindPopup("<b>Lumina Safe Corridor</b><br/>Safety Score: High Illumination & Verified Patrols");
-        layerGroupRef.current.addLayer(safeLine);
+        if (routes.primaryWaypoints && routes.primaryWaypoints.length > 0) {
+          const directGeom = await fetchPedestrianGeometry(routes.primaryWaypoints);
+          const primaryLine = L.polyline(directGeom, {
+            color: '#DC2626',
+            weight: 8,
+            dashArray: '6, 8',
+            opacity: 0.75
+          });
+          primaryLine.bindPopup("<b>Direct Pedestrian Corridor</b><br/>Standard foot path");
+          layerGroupRef.current.addLayer(primaryLine);
+          fitBoundsTarget = primaryLine.getBounds();
+        }
 
-        // Fit map view to exact route bounds!
-        map.fitBounds(safeLine.getBounds(), { padding: [50, 50] });
-      }
+        if (routes.safeWaypoints && routes.safeWaypoints.length > 0) {
+          const safeGeom = await fetchPedestrianGeometry(routes.safeWaypoints);
+          const safeLine = L.polyline(safeGeom, {
+            color: '#059669',
+            weight: 6,
+            opacity: 0.95
+          });
+          safeLine.bindPopup("<b>Lumina Safe Pedestrian Corridor</b><br/>High Illumination & Verified Patrols");
+          layerGroupRef.current.addLayer(safeLine);
+          fitBoundsTarget = safeLine.getBounds();
+        }
+
+        if (fitBoundsTarget && mapInstanceRef.current) {
+          mapInstanceRef.current.fitBounds(fitBoundsTarget, { padding: [50, 50] });
+        }
+      };
+
+      renderRoutes();
     }
 
     // Render High-Contrast Heatmap & Risk Circles
