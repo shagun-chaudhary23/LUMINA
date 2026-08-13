@@ -54,6 +54,7 @@ export default function LocationInput({
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const containerRef = useRef(null);
+  const debounceTimerRef = useRef(null);
 
   useEffect(() => {
     setQuery(value || '');
@@ -74,6 +75,11 @@ export default function LocationInput({
     setQuery(val);
     if (onChange) onChange(val);
 
+    // Clear previous debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
     if (val.trim().length >= 1) {
       setIsOpen(true);
       const cleanVal = val.trim().toLowerCase();
@@ -85,11 +91,13 @@ export default function LocationInput({
 
       setSuggestions(matchedLocal);
 
-      // Debounced fetch from Nominatim for extended queries
+      // Debounced fetch from OpenStreetMap Nominatim (Strictly <= 1 req/sec -> 1000ms debounce)
       if (cleanVal.length >= 3) {
         setLoading(true);
-        const timer = setTimeout(() => {
-          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val + ', India')}&limit=5`)
+        debounceTimerRef.current = setTimeout(() => {
+          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val + ', India')}&limit=5`, {
+            headers: { 'Accept-Language': 'en' }
+          })
             .then(res => res.json())
             .then(data => {
               const apiMatched = (data || []).map(d => ({
@@ -115,9 +123,7 @@ export default function LocationInput({
               setSuggestions(matchedLocal);
               setLoading(false);
             });
-        }, 250);
-
-        return () => clearTimeout(timer);
+        }, 1000); // Enforced 1 request / sec limit
       }
     } else {
       setSuggestions([]);
