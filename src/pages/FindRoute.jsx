@@ -231,9 +231,6 @@ export default function FindRoute() {
               <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
                 {routeResult.primaryRoute?.riskWarning}
               </p>
-              <p className="text-[10px] leading-relaxed text-stone-500 dark:text-stone-400 border-t border-stone-200/80 dark:border-stone-700/70 pt-2">
-                Direct Route displays a straight-line baseline for comparison. Navigation routing is planned for future scope.
-              </p>
             </div>
 
             {/* Past Incidents List */}

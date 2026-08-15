@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet.heat';
 import { COMPREHENSIVE_LOCATIONS } from './LocationInput';
-import { formatRoutingCoords } from '../utils/geo';
+import { getPedestrianRoute } from '../services/api';
 
 // Helper: Find closest landmark from our comprehensive database
 function findClosestLandmark(lat, lng) {
@@ -25,45 +25,17 @@ function findClosestLandmark(lat, lng) {
   return null;
 }
 
-// Fetch pedestrian/foot profile route geometry (OpenRouteService + OSRM foot fallback)
+// Fetch pedestrian/foot profile route geometry via our own backend
+// (backend handles ORS + OSRM fallback and keeps API keys server-side)
 async function fetchPedestrianGeometry(waypoints) {
   if (!waypoints || waypoints.length < 2) return waypoints;
 
-  const startLngLat = [waypoints[0][1], waypoints[0][0]]; // [lng, lat]
-  const endLngLat = [waypoints[waypoints.length - 1][1], waypoints[waypoints.length - 1][0]]; // [lng, lat]
-  
-  // 1. Try OpenRouteService foot-walking API
   try {
-    const apiKey = 'ROTATED_FOR_SECURITY';
-    const orsUrl = `https://api.openrouteservice.org/v2/directions/foot-walking?api_key=${apiKey}&start=${startLngLat.join(',')}&end=${endLngLat.join(',')}`;
-    const orsRes = await fetch(orsUrl);
-    if (orsRes.ok) {
-      const orsData = await orsRes.json();
-      if (orsData.features && orsData.features[0] && orsData.features[0].geometry) {
-        // Convert GeoJSON [lng, lat] array to Leaflet [lat, lng]
-        return orsData.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
-      }
-    }
+    return await getPedestrianRoute(waypoints);
   } catch (err) {
-    console.warn("OpenRouteService foot profile fetch warning:", err);
+    console.warn('Route fetch failed, falling back to straight line:', err);
+    return waypoints;
   }
-
-  // 2. Fallback to OSRM pedestrian/foot profile with full geometry
-  try {
-    const coordsString = formatRoutingCoords(waypoints);
-    const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordsString}?overview=full&geometries=geojson`;
-    const osrmRes = await fetch(osrmUrl);
-    if (osrmRes.ok) {
-      const osrmData = await osrmRes.json();
-      if (osrmData.routes && osrmData.routes[0] && osrmData.routes[0].geometry) {
-        return osrmData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-      }
-    }
-  } catch (err) {
-    console.warn("OSRM foot profile fallback warning:", err);
-  }
-
-  return waypoints;
 }
 
 export default function MapComponent({
@@ -244,7 +216,7 @@ export default function MapComponent({
       }
 
       const heatPoints = heatmapData.map(h => [h.lat, h.lng, h.intensity || 0.6]);
-      
+
       heatLayerRef.current = L.heatLayer(heatPoints, {
         radius: 45,
         blur: 15,

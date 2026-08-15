@@ -165,23 +165,50 @@ async function resolveLocation(query) {
   return { lat: 28.6139 + (Math.random() - 0.5) * 0.04, lng: 77.2090 + (Math.random() - 0.5) * 0.04, name: query };
 }
 
-// ── Build a slight detour path for the safe route ──
+// ── Pedestrian Directions Client API ──
+export async function getPedestrianRoute(waypoints) {
+  if (!waypoints || !Array.isArray(waypoints) || waypoints.length < 2) {
+    return waypoints || [];
+  }
+  const cleanWaypoints = waypoints.filter(wp => Array.isArray(wp) && wp.length >= 2 && !isNaN(wp[0]) && !isNaN(wp[1]));
+  if (cleanWaypoints.length < 2) return waypoints;
+
+  try {
+    const res = await fetch(`${API_BASE}/directions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ waypoints: cleanWaypoints })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.coordinates && Array.isArray(data.coordinates) && data.coordinates.length >= 2) {
+        return data.coordinates;
+      }
+    }
+  } catch (err) {
+    console.warn('getPedestrianRoute fetch error:', err);
+  }
+  return cleanWaypoints;
+}
+
+// ── Build detour path for the safe route with safe fallback ──
 function buildSafePath(s, e) {
+  if (!s || !e || !Array.isArray(s) || !Array.isArray(e)) return [];
   const dLat = e[0] - s[0], dLng = e[1] - s[1];
   const perpLat = -dLng * 0.22, perpLng = dLat * 0.22;
   const m = [(s[0] + e[0]) / 2, (s[1] + e[1]) / 2];
-  return [
-    s,
-    [s[0] + perpLat * 0.5, s[1] + perpLng * 0.5],
-    [m[0] + perpLat, m[1] + perpLng],
-    [e[0] + perpLat * 0.5, e[1] + perpLng * 0.5],
-    e
-  ];
+
+  const viaPoint = [m[0] + perpLat, m[1] + perpLng];
+  // Ensure viaPoint is valid
+  if (!isNaN(viaPoint[0]) && !isNaN(viaPoint[1])) {
+    return [s, viaPoint, e];
+  }
+  return [s, e];
 }
 
 function buildDirectPath(s, e) {
-  const m = [(s[0] + e[0]) / 2 + 0.003, (s[1] + e[1]) / 2 - 0.003];
-  return [s, m, e];
+  if (!s || !e || !Array.isArray(s) || !Array.isArray(e)) return [];
+  return [s, e];
 }
 
 // ──────────────────────────────────────────────────────────────

@@ -30,11 +30,14 @@ try {
   console.log('Kaggle dataset fallback initialized.');
 }
 
+import directionsRouter from './routes/directions.js';
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+app.use('/api/directions', directionsRouter);
 
 // Helper function to get today's date string YYYY-MM-DD
 function getTodayString() {
