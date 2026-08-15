@@ -24,3 +24,17 @@ export function formatRoutingCoords(latLngWaypoints) {
     .map(([lat, lng]) => `${lng},${lat}`)
     .join(';');
 }
+
+// Formats meters into "X.X km"
+export function formatDistance(meters) {
+  if (meters === undefined || meters === null || isNaN(meters)) return '0.0 km';
+  const km = meters / 1000;
+  return `${km.toFixed(1)} km`;
+}
+
+// Formats seconds into "X mins"
+export function formatDuration(seconds) {
+  if (seconds === undefined || seconds === null || isNaN(seconds)) return '0 mins';
+  const mins = Math.max(1, Math.round(seconds / 60));
+  return `${mins} mins`;
+}

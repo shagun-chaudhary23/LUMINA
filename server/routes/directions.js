@@ -1,9 +1,39 @@
 import express from 'express';
 const router = express.Router();
 
+function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // meters
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function calculateRawWaypointsDistanceAndDuration(waypoints) {
+  let totalMeters = 0;
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    totalMeters += haversineDistanceMeters(
+      waypoints[i][0], waypoints[i][1],
+      waypoints[i+1][0], waypoints[i+1][1]
+    );
+  }
+  // 5 km/h walking speed = 5000 meters / 3600 seconds = 1.38889 m/s
+  const durationSec = totalMeters / (5000 / 3600);
+  return {
+    distanceMeters: Math.round(totalMeters),
+    durationSeconds: Math.round(durationSec)
+  };
+}
+
 // POST /api/directions
 // Accepts: { waypoints: [[lat, lng], [lat, lng], ...] }
-// Returns: { coordinates: [[lat, lng], ...], source: 'ors' | 'osrm' | 'raw' }
+// Returns: { coordinates: [[lat, lng], ...], distanceMeters, durationSeconds, source }
 router.post('/', async (req, res) => {
   try {
     const { waypoints } = req.body;
@@ -43,10 +73,17 @@ router.post('/', async (req, res) => {
 
         if (orsRes.ok) {
           const orsData = await orsRes.json();
-          if (orsData.features?.[0]?.geometry?.coordinates) {
-            // ORS returns [lng, lat] -> convert back to [lat, lng] for Leaflet
-            const coords = orsData.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
-            return res.json({ coordinates: coords, source: 'ors' });
+          const summary = orsData.features?.[0]?.properties?.summary;
+          const coordsRaw = orsData.features?.[0]?.geometry?.coordinates;
+
+          if (summary && coordsRaw) {
+            const coords = coordsRaw.map(c => [c[1], c[0]]);
+            return res.json({
+              coordinates: coords,
+              distanceMeters: Math.round(summary.distance || 0),
+              durationSeconds: Math.round(summary.duration || 0),
+              source: 'ors'
+            });
           }
         } else {
           console.warn(`ORS API responded with status ${orsRes.status}`);
@@ -64,17 +101,29 @@ router.post('/', async (req, res) => {
 
       if (osrmRes.ok) {
         const osrmData = await osrmRes.json();
-        if (osrmData.routes?.[0]?.geometry?.coordinates) {
-          const coords = osrmData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-          return res.json({ coordinates: coords, source: 'osrm' });
+        const routeObj = osrmData.routes?.[0];
+        if (routeObj && routeObj.geometry?.coordinates) {
+          const coords = routeObj.geometry.coordinates.map(c => [c[1], c[0]]);
+          return res.json({
+            coordinates: coords,
+            distanceMeters: Math.round(routeObj.distance || 0),
+            durationSeconds: Math.round(routeObj.duration || 0),
+            source: 'osrm'
+          });
         }
       }
     } catch (osrmErr) {
       console.warn('OSRM foot fallback warning:', osrmErr.message);
     }
 
-    // 3. Final fallback: return raw waypoints
-    return res.json({ coordinates: validWaypoints, source: 'raw' });
+    // 3. Final fallback: calculate straight-line Haversine distance and estimated 5 km/h duration
+    const fallbackStats = calculateRawWaypointsDistanceAndDuration(validWaypoints);
+    return res.json({
+      coordinates: validWaypoints,
+      distanceMeters: fallbackStats.distanceMeters,
+      durationSeconds: fallbackStats.durationSeconds,
+      source: 'straight-line-fallback'
+    });
 
   } catch (err) {
     console.error('Directions handler error:', err);

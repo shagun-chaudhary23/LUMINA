@@ -168,10 +168,12 @@ async function resolveLocation(query) {
 // ── Pedestrian Directions Client API ──
 export async function getPedestrianRoute(waypoints) {
   if (!waypoints || !Array.isArray(waypoints) || waypoints.length < 2) {
-    return waypoints || [];
+    return { coordinates: waypoints || [], distanceMeters: 0, durationSeconds: 0, source: 'raw' };
   }
   const cleanWaypoints = waypoints.filter(wp => Array.isArray(wp) && wp.length >= 2 && !isNaN(wp[0]) && !isNaN(wp[1]));
-  if (cleanWaypoints.length < 2) return waypoints;
+  if (cleanWaypoints.length < 2) {
+    return { coordinates: waypoints, distanceMeters: 0, durationSeconds: 0, source: 'raw' };
+  }
 
   try {
     const res = await fetch(`${API_BASE}/directions`, {
@@ -182,13 +184,18 @@ export async function getPedestrianRoute(waypoints) {
     if (res.ok) {
       const data = await res.json();
       if (data.coordinates && Array.isArray(data.coordinates) && data.coordinates.length >= 2) {
-        return data.coordinates;
+        return {
+          coordinates: data.coordinates,
+          distanceMeters: data.distanceMeters || 0,
+          durationSeconds: data.durationSeconds || 0,
+          source: data.source || 'ors'
+        };
       }
     }
   } catch (err) {
     console.warn('getPedestrianRoute fetch error:', err);
   }
-  return cleanWaypoints;
+  return { coordinates: cleanWaypoints, distanceMeters: 0, durationSeconds: 0, source: 'raw' };
 }
 
 // ── Build detour path for the safe route with safe fallback ──

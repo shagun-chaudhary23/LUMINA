@@ -3,6 +3,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { calculateRouteSafety } from '../services/api';
 import MapComponent from '../components/MapComponent';
 import LocationInput from '../components/LocationInput';
+import { formatDistance, formatDuration } from '../utils/geo';
 import { Navigation, ShieldCheck, ShieldAlert, AlertTriangle, ArrowRight, Lightbulb, Camera, Sparkles, CheckCircle2 } from 'lucide-react';
 
 export default function FindRoute() {
@@ -13,6 +14,7 @@ export default function FindRoute() {
   const [loading, setLoading] = useState(false);
   const [routeResult, setRouteResult] = useState(null);
   const [routeError, setRouteError] = useState(null);
+  const [routeMeta, setRouteMeta] = useState({ primaryMeta: null, safeMeta: null });
 
   const fetchRoute = async (orig, dest) => {
     setLoading(true);
@@ -40,6 +42,16 @@ export default function FindRoute() {
     setDestination(presetDest);
     fetchRoute(presetOrigin, presetDest);
   };
+
+  const handleRouteMetadata = useCallback(({ primaryMeta, safeMeta }) => {
+    setRouteMeta({ primaryMeta, safeMeta });
+  }, []);
+
+  const safeDistMeters = routeMeta.safeMeta?.distanceMeters || (routeResult?.alternateSafeRoute?.distanceKm ? routeResult.alternateSafeRoute.distanceKm * 1000 : 0);
+  const safeDurSeconds = routeMeta.safeMeta?.durationSeconds || (routeResult?.alternateSafeRoute?.etaMins ? routeResult.alternateSafeRoute.etaMins * 60 : 0);
+
+  const primaryDistMeters = routeMeta.primaryMeta?.distanceMeters || (routeResult?.primaryRoute?.distanceKm ? routeResult.primaryRoute.distanceKm * 1000 : 0);
+  const primaryDurSeconds = routeMeta.primaryMeta?.durationSeconds || (routeResult?.primaryRoute?.etaMins ? routeResult.primaryRoute.etaMins * 60 : 0);
 
   return (
     <div className="space-y-8 py-6 pb-16">
@@ -158,6 +170,7 @@ export default function FindRoute() {
                 safeWaypoints: routeResult.alternateSafeRoute?.waypoints
               }}
               markers={routeResult.incidentsAlongRoute}
+              onRouteMetadata={handleRouteMetadata}
               height="520px"
             />
           </div>
@@ -179,7 +192,9 @@ export default function FindRoute() {
                   <h4 className="font-serif text-xl font-bold text-stone-900 dark:text-white">
                     {t('safeRouteLabel')}
                   </h4>
-                  <p className="text-xs text-stone-500">{routeResult.alternateSafeRoute?.distanceKm} km • {routeResult.alternateSafeRoute?.etaMins} mins travel time</p>
+                  <p className="text-xs text-stone-500 font-medium">
+                    {formatDistance(safeDistMeters)} • {formatDuration(safeDurSeconds)} travel time
+                  </p>
                 </div>
               </div>
 
@@ -218,16 +233,36 @@ export default function FindRoute() {
             </div>
 
             {/* Direct Standard Route Comparison Card */}
-            <div className="bg-cream-100/60 dark:bg-stone-900/60 border border-editorial-border dark:border-editorial-darkborder rounded-2xl p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <AlertTriangle className="w-4 h-4 text-red-500" />
-                  <h4 className="font-serif font-bold text-base text-stone-800 dark:text-cream-100">{t('directRouteLabel')}</h4>
+            <div className="bg-white dark:bg-editorial-darkcard border border-editorial-border dark:border-editorial-darkborder rounded-2xl p-6 shadow-editorial space-y-4">
+              
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-600 flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6 stroke-[2.2]" />
                 </div>
-                <div className="text-sm font-serif font-bold text-red-600 dark:text-red-400">
-                  Score: {routeResult.primaryRoute?.safetyScore} / 10
+                <div>
+                  <h4 className="font-serif text-xl font-bold text-stone-900 dark:text-white">
+                    {t('directRouteLabel')}
+                  </h4>
+                  <p className="text-xs text-stone-500 font-medium">
+                    {formatDistance(primaryDistMeters)} • {formatDuration(primaryDurSeconds)} travel time
+                  </p>
                 </div>
               </div>
+
+              {/* Direct Route Safety Score Badge */}
+              <div className="flex items-center justify-between bg-red-50 dark:bg-red-950/40 p-4 rounded-xl border border-red-200 dark:border-red-800">
+                <div>
+                  <span className="text-xs font-bold text-red-800 dark:text-red-300 uppercase tracking-wider">{t('safetyScoreLabel')}</span>
+                  <p className="text-xs text-red-700 dark:text-red-400">Direct Route (Unoptimized for safety)</p>
+                </div>
+                <div className="text-right">
+                  <span className="font-serif text-4xl font-bold text-red-600 dark:text-red-400">
+                    {routeResult.primaryRoute?.safetyScore}
+                  </span>
+                  <span className="text-xs text-stone-500 font-semibold"> / 10</span>
+                </div>
+              </div>
+
               <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
                 {routeResult.primaryRoute?.riskWarning}
               </p>

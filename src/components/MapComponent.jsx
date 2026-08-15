@@ -28,13 +28,19 @@ function findClosestLandmark(lat, lng) {
 // Fetch pedestrian/foot profile route geometry via our own backend
 // (backend handles ORS + OSRM fallback and keeps API keys server-side)
 async function fetchPedestrianGeometry(waypoints) {
-  if (!waypoints || waypoints.length < 2) return waypoints;
+  if (!waypoints || waypoints.length < 2) {
+    return { coordinates: waypoints || [], distanceMeters: 0, durationSeconds: 0, source: 'raw' };
+  }
 
   try {
-    return await getPedestrianRoute(waypoints);
+    const res = await getPedestrianRoute(waypoints);
+    if (res && res.coordinates) {
+      return res;
+    }
+    return { coordinates: Array.isArray(res) ? res : waypoints, distanceMeters: 0, durationSeconds: 0, source: 'raw' };
   } catch (err) {
     console.warn('Route fetch failed, falling back to straight line:', err);
-    return waypoints;
+    return { coordinates: waypoints, distanceMeters: 0, durationSeconds: 0, source: 'raw' };
   }
 }
 
@@ -45,6 +51,7 @@ export default function MapComponent({
   routes = null, // { primaryWaypoints, safeWaypoints }
   heatmapData = null, // array of { lat, lng, intensity, zone, riskLevel }
   onMapClick = null, // callback for selecting location ({ lat, lng, addressName })
+  onRouteMetadata = null, // optional callback for returning calculated route distance/duration metadata
   selectedPin = null,
   height = '500px'
 }) {
@@ -176,9 +183,13 @@ export default function MapComponent({
       const renderRoutes = async () => {
         let fitBoundsTarget = null;
 
+        let primaryMeta = null;
+        let safeMeta = null;
+
         if (routes.primaryWaypoints && routes.primaryWaypoints.length > 0) {
-          const directGeom = await fetchPedestrianGeometry(routes.primaryWaypoints);
-          const primaryLine = L.polyline(directGeom, {
+          primaryMeta = await fetchPedestrianGeometry(routes.primaryWaypoints);
+          const directCoords = primaryMeta.coordinates || primaryMeta;
+          const primaryLine = L.polyline(directCoords, {
             color: '#DC2626',
             weight: 8,
             dashArray: '6, 8',
@@ -190,8 +201,9 @@ export default function MapComponent({
         }
 
         if (routes.safeWaypoints && routes.safeWaypoints.length > 0) {
-          const safeGeom = await fetchPedestrianGeometry(routes.safeWaypoints);
-          const safeLine = L.polyline(safeGeom, {
+          safeMeta = await fetchPedestrianGeometry(routes.safeWaypoints);
+          const safeCoords = safeMeta.coordinates || safeMeta;
+          const safeLine = L.polyline(safeCoords, {
             color: '#059669',
             weight: 6,
             opacity: 0.95
@@ -199,6 +211,10 @@ export default function MapComponent({
           safeLine.bindPopup("<b>Lumina Safe Pedestrian Corridor</b><br/>High Illumination & Verified Patrols");
           layerGroupRef.current.addLayer(safeLine);
           fitBoundsTarget = safeLine.getBounds();
+        }
+
+        if (onRouteMetadata && (primaryMeta || safeMeta)) {
+          onRouteMetadata({ primaryMeta, safeMeta });
         }
 
         if (fitBoundsTarget && mapInstanceRef.current) {
