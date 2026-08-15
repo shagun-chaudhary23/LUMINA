@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { calculateRouteSafety } from '../services/api';
 import MapComponent from '../components/MapComponent';
@@ -46,6 +46,15 @@ export default function FindRoute() {
   const handleRouteMetadata = useCallback(({ primaryMeta, safeMeta }) => {
     setRouteMeta({ primaryMeta, safeMeta });
   }, []);
+
+  const mapRoutes = useMemo(() => ({
+  primaryWaypoints: routeResult?.primaryRoute?.waypoints,
+  safeWaypoints: routeResult?.alternateSafeRoute?.waypoints
+}), [routeResult]);
+
+const mapCenter = useMemo(() => (
+  routeResult?.startCoords || routeResult?.primaryRoute?.waypoints?.[0] || [28.6139, 77.2090]
+), [routeResult]);
 
   const safeDistMeters = routeMeta.safeMeta?.distanceMeters || (routeResult?.alternateSafeRoute?.distanceKm ? routeResult.alternateSafeRoute.distanceKm * 1000 : 0);
   const safeDurSeconds = routeMeta.safeMeta?.durationSeconds || (routeResult?.alternateSafeRoute?.etaMins ? routeResult.alternateSafeRoute.etaMins * 60 : 0);
@@ -163,16 +172,13 @@ export default function FindRoute() {
             </div>
 
             <MapComponent
-              center={routeResult.startCoords || routeResult.primaryRoute?.waypoints?.[0] || [28.6139, 77.2090]}
-              zoom={12}
-              routes={{
-                primaryWaypoints: routeResult.primaryRoute?.waypoints,
-                safeWaypoints: routeResult.alternateSafeRoute?.waypoints
-              }}
-              markers={routeResult.incidentsAlongRoute}
-              onRouteMetadata={handleRouteMetadata}
-              height="520px"
-            />
+             center={mapCenter}
+             zoom={12}
+             routes={mapRoutes}
+             markers={routeResult.incidentsAlongRoute}
+             onRouteMetadata={handleRouteMetadata}
+             height="520px"
+             />
           </div>
 
           {/* Right Column: Route Score & Detailed Breakdown */}

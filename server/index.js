@@ -23,7 +23,7 @@ connectDB();
 // Open and read Kaggle crime data if present
 let realCrimeData = [];
 try {
-  const crimeDataRaw = fs.readFileSync(path.join(__dirname, 'crime_dataset (1).json'));
+  const crimeDataRaw = fs.readFileSync(path.join(__dirname, 'crime_dataset.json'));
   realCrimeData = JSON.parse(crimeDataRaw);
   console.log(`Loaded ${realCrimeData.length} real crimes from Kaggle!`);
 } catch (e) {
